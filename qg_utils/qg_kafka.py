@@ -24,6 +24,10 @@ class QGKafkaConsumer(KafkaConsumer):
                 mapping from offset to time when it was consumed first
         '''
         super(QGKafkaConsumer, self).__init__(*args, **kwargs)
+        if 'offset_store_limit' in kwargs:
+            self.offset_store_limit = kwargs['offset_store_limit']
+        else:
+            self.offset_store_limit = 1000 # default is 1000
         self.consumed_offsets_to_time = {}
 
     def __next__(self):
@@ -40,7 +44,7 @@ class QGKafkaConsumer(KafkaConsumer):
                 err_message += ' first consumption was at [ {} ]'.format(previous_time)
                 print(err_message, file=sys.stderr)
             else:
-                if len(self.consumed_offsets_to_time) > 1000:
+                if len(self.consumed_offsets_to_time) > self.offset_store_limit:
                     self.consumed_offsets_to_time = {}
                 self.consumed_offsets_to_time[curr_offset] = time.time()
                 return message
