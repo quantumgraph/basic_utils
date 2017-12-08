@@ -18,17 +18,12 @@ class QGKafkaConsumer(KafkaConsumer):
         '''
         constructor for QGKafkaConsumer
         It is same as that of KafkaConsumer
-        only one difference is that it stores offset of last 1000 messages
-        in a dict which maps offset to time when offset was consumed first time
-        Param: self.message_key_to_time
-                mapping from uniq key of message to time when it was consumed first
+        With additional feature of keeping track of last consumed offset for given
+        (topic, partition) and prints message to stderr on repeat consumption of data
         '''
         super(QGKafkaConsumer, self).__init__(*args, **kwargs)
-        if 'offset_store_limit' in kwargs:
-            self.offset_store_limit = kwargs['offset_store_limit']
-        else:
-            self.offset_store_limit = 1000 # default is 1000
-        self.message_key_to_time = {}
+        self.repeats_found = 0
+        self.topic_partition_to_last_offset = {}
 
     def __next__(self):
         '''
@@ -37,26 +32,26 @@ class QGKafkaConsumer(KafkaConsumer):
         '''
         while True:
             message = super(QGKafkaConsumer, self).__next__()
-            curr_key = self.get_qg_message_key(message)
-            if curr_key in self.message_key_to_time:
-                previous_time = self.message_key_to_time[curr_key]
-                err_message = 'Repeat offset [ {} ] at time [ {} ]'.format(curr_key, time.time())
-                err_message += ' first consumption was at [ {} ]'.format(previous_time)
-                print(err_message, file=sys.stderr)
-            else:
-                if len(self.message_key_to_time) > self.offset_store_limit:
-                    self.message_key_to_time = {}
-                self.message_key_to_time[curr_key] = time.time()
+            if not self.is_repeat_message(message):
                 return message
 
-    def get_qg_message_key(self, message):
+    def is_repeat_message(self, message):
         '''
-        this function returns uniq key for given message in kafka
-        the uniq key is generated as:
-            str(message.offset) + message.topic + '_' + str(message.partition)
-        we are getting this because it is possible that offset is repeated among partitions/topics
-
-        PS: method name get_qg_message_key contains _qg_ to avoid collid with method
-            of KafkaConsumer(if any in future)
+        this function takes kafka message as input and checks if message is already consumed
+        Logic:
+            it saves offset mapped with (topic, partition)
+            if current offset for message is less than previsous message for given topic, offset
+            then message is repeated
         '''
-        return str(message.offset) + '_' + message.topic + '_' + str(message.partition)
+        topic = message.topic
+        offset = message.offset
+        partition = message.partition
+        self.topic_partition_to_last_offset.setdefault((topic, partition), 0)
+        if self.topic_partition_to_last_offset[(topic, partition)] < offset:
+            self.topic_partition_to_last_offset[(topic, partition)] = offset
+            return False
+        else:
+            self.repeats_found += 1
+            err_message = 'Message is repeated [ {} ] times'.format(self.repeats_found)
+            print(err_message, file=sys.stderr)
+            return True
