@@ -18,3 +18,6 @@ setup(
     include_package_data=True,
     classifiers=[],
 )
+
+# uploading command for package
+# python setup.py sdist upload
