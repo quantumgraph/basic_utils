@@ -6,7 +6,7 @@ def read(fname):
 
 setup(
     name='qg_utils',
-    version='0.0.5',
+    version='0.0.6',
     description='',
     url='https://github.com/quantumgraph/qg_utils',
     author='QuantumGraph',
